@@ -66,18 +66,5 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>UrbanSync usa tu ubicación para registrar dónde ocurre la incidencia.</string>
-	<key>NSCameraUsageDescription</key>
-	<string>UrbanSync usa la cámara para adjuntar evidencias de la incidencia.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>UrbanSync accede a tus fotos para adjuntar evidencias.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>UrbanSync puede grabar video como evidencia.</string>
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSAllowsArbitraryLoads</key>
-		<true/>
-	</dict>
 </dict>
 </plist>
