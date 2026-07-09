@@ -1,0 +1,28 @@
+# Secrets / entorno
+.env
+
+# Flutter / Dart
+mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/build/
+mobile/**/build/
+mobile/android/.gradle/
+mobile/android/local.properties
+mobile/android/key.properties
+mobile/**/*.g.dart.lock
+mobile/.idea/
+mobile/*.iml
+mobile/**/*.iml
+
+# .NET / backend
+backend/**/bin/
+backend/**/obj/
+backend/**/*.user
+backend/**/*.db
+backend/**/*.db-shm
+backend/**/*.db-wal
+
+# Sistema
+.DS_Store
+Thumbs.db

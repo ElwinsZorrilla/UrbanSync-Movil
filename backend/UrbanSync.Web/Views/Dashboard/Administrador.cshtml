@@ -1,0 +1,48 @@
+<div class="row g-4">
+    <div class="col-12">
+        <div class="p-4 p-md-5 bg-white rounded-4 shadow-sm border">
+            <span class="badge bg-dark mb-3">Administrador</span>
+            <h1 class="fw-bold mb-2">Panel de Administración</h1>
+            <p class="text-muted mb-4">
+                Gestiona usuarios, roles, accesos y actividades registradas en UrbanSync.
+            </p>
+
+            <div class="d-flex flex-wrap gap-2">
+                <a asp-controller="UserManagement" asp-action="Index" class="btn btn-dark">
+                    Gestionar usuarios
+                </a>
+
+                <a asp-controller="Activity" asp-action="Index" class="btn btn-outline-dark">
+                    Ver actividades
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="card-body">
+                <h5 class="fw-bold">Usuarios</h5>
+                <p class="text-muted mb-0">Crear, activar, desactivar y consultar usuarios del sistema.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="card-body">
+                <h5 class="fw-bold">Roles</h5>
+                <p class="text-muted mb-0">Control de acceso para Administrador, Supervisor, Técnico y Ciudadano.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="card-body">
+                <h5 class="fw-bold">Trazabilidad</h5>
+                <p class="text-muted mb-0">Registro de acciones para supervisar operaciones realizadas por usuarios.</p>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,50 @@
+@model UserCreateViewModel
+
+<h2>Crear usuario</h2>
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <form asp-action="Create" method="post">
+            <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+            <div class="mb-3">
+                <label asp-for="FullName" class="form-label">Nombre completo</label>
+                <input asp-for="FullName" class="form-control" />
+            </div>
+
+            <div class="mb-3">
+                <label asp-for="IdentificationNumber" class="form-label">Cédula</label>
+                <input asp-for="IdentificationNumber" class="form-control" />
+            </div>
+
+            <div class="mb-3">
+                <label asp-for="Email" class="form-label">Correo</label>
+                <input asp-for="Email" class="form-control" />
+            </div>
+
+            <div class="mb-3">
+                <label asp-for="Position" class="form-label">Cargo</label>
+                <input asp-for="Position" class="form-control" />
+            </div>
+
+            <div class="mb-3">
+                <label asp-for="Role" class="form-label">Rol</label>
+                <select asp-for="Role" class="form-select">
+                    <option value="">Seleccione un rol</option>
+                    <option value="Administrador">Administrador</option>
+                    <option value="Supervisor">Supervisor</option>
+                    <option value="Tecnico">Técnico</option>
+                    <option value="Ciudadano">Ciudadano</option>
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label asp-for="Password" class="form-label">Contraseña temporal</label>
+                <input asp-for="Password" class="form-control" />
+            </div>
+
+            <button class="btn btn-dark">Guardar</button>
+            <a asp-action="Index" class="btn btn-secondary">Volver</a>
+        </form>
+    </div>
+</div>
