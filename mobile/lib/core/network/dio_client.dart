@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../features/auth/presentation/auth_controller.dart';
 import '../env/env.dart';
 import '../storage/token_storage.dart';
 
@@ -25,6 +26,15 @@ final dioProvider = Provider<Dio>((ref) {
           options.headers['Authorization'] = 'Bearer $token';
         }
         handler.next(options);
+      },
+      onError: (error, handler) async {
+        final path = error.requestOptions.path;
+        final isAuthCall = path.contains('/api/auth/');
+        if (error.response?.statusCode == 401 && !isAuthCall) {
+          await tokenStorage.clear();
+          ref.read(authControllerProvider.notifier).markSessionExpired();
+        }
+        handler.next(error);
       },
     ),
   );

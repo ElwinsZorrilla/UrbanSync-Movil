@@ -53,17 +53,26 @@ public class EvidencesApiController : ControllerBase
         [FromForm] double? lng,
         [FromForm] string? descripcion)
     {
-        if (!await _db.Incidencias.AnyAsync(i => i.Id == incidentId))
+        var incidencia = await _db.Incidencias.FirstOrDefaultAsync(i => i.Id == incidentId);
+        if (incidencia == null)
             return NotFound();
+
+        var esStaff = User.IsInRole("Administrador") || User.IsInRole("Supervisor") || User.IsInRole("Tecnico");
+        if (!esStaff && incidencia.UsuarioReportaId != CurrentUserId)
+            return StatusCode(StatusCodes.Status403Forbidden);
 
         if (file == null || file.Length == 0)
             return BadRequest(new ProblemDetails { Title = "Archivo requerido", Detail = "Debe adjuntar un archivo de evidencia." });
+
+        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+        var permitidas = new[] { ".jpg", ".jpeg", ".png", ".webp", ".gif", ".mp4", ".pdf" };
+        if (!permitidas.Contains(extension))
+            return BadRequest(new ProblemDetails { Title = "Tipo de archivo no permitido", Detail = "Formatos válidos: imágenes, mp4 o pdf." });
 
         var webRoot = _env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
         var uploadsDir = Path.Combine(webRoot, "uploads");
         Directory.CreateDirectory(uploadsDir);
 
-        var extension = Path.GetExtension(file.FileName);
         var fileName = $"{Guid.NewGuid():N}{extension}";
         var fullPath = Path.Combine(uploadsDir, fileName);
 

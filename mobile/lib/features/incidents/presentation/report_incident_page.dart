@@ -58,6 +58,7 @@ class _ReportIncidentPageState extends ConsumerState<ReportIncidentPage> {
   Future<void> _initLocation() async {
     try {
       if (!await Geolocator.isLocationServiceEnabled()) {
+        if (!mounted) return;
         setState(
           () => _locationNote =
               'Activa la ubicación para autodetectar tu posición.',
@@ -73,6 +74,7 @@ class _ReportIncidentPageState extends ConsumerState<ReportIncidentPage> {
 
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
+        if (!mounted) return;
         setState(
           () => _locationNote =
               'Permiso de ubicación denegado. Ajusta el pin manualmente.',
@@ -86,11 +88,13 @@ class _ReportIncidentPageState extends ConsumerState<ReportIncidentPage> {
           accuracy: LocationAccuracy.high,
         ),
       );
+      if (!mounted) return;
       _updatePoint(
         LatLng(position.latitude, position.longitude),
         moveMap: true,
       );
     } catch (_) {
+      if (!mounted) return;
       setState(
         () => _locationNote =
             'No se pudo obtener la ubicación. Ajusta el pin manualmente.',
@@ -145,7 +149,8 @@ class _ReportIncidentPageState extends ConsumerState<ReportIncidentPage> {
       imageQuality: 70,
       maxWidth: 1600,
     );
-    if (picked != null) setState(() => _photoPath = picked.path);
+    if (!mounted || picked == null) return;
+    setState(() => _photoPath = picked.path);
   }
 
   Future<void> _submit() async {

@@ -26,6 +26,9 @@ public class IncidentsApiController : ControllerBase
 
     private string CurrentUserId => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
 
+    private bool IsStaff =>
+        User.IsInRole("Administrador") || User.IsInRole("Supervisor") || User.IsInRole("Tecnico");
+
     [HttpPost]
     public async Task<ActionResult<IncidentDto>> Create(CreateIncidentRequest request)
     {
@@ -42,24 +45,19 @@ public class IncidentsApiController : ControllerBase
         if (jurisdiccionId == null)
             return Problem("No hay una jurisdicción configurada en el sistema.", statusCode: StatusCodes.Status409Conflict);
 
-        var ubicacion = new Ubicacion
-        {
-            Direccion = request.Ubicacion.Direccion,
-            Referencia = request.Ubicacion.Referencia,
-            Latitud = (decimal)request.Ubicacion.Lat,
-            Longitud = (decimal)request.Ubicacion.Lng,
-            JurisdiccionId = jurisdiccionId.Value
-        };
-
-        _db.Ubicaciones.Add(ubicacion);
-        await _db.SaveChangesAsync();
-
         var incidencia = new Incidencia
         {
             CodigoCaso = GenerarCodigo(),
             UsuarioReportaId = CurrentUserId,
             TipoIncidenciaId = tipo.Id,
-            UbicacionId = ubicacion.Id,
+            Ubicacion = new Ubicacion
+            {
+                Direccion = request.Ubicacion.Direccion,
+                Referencia = request.Ubicacion.Referencia,
+                Latitud = (decimal)request.Ubicacion.Lat,
+                Longitud = (decimal)request.Ubicacion.Lng,
+                JurisdiccionId = jurisdiccionId.Value
+            },
             InstitucionAsignadaId = tipo.InstitucionId,
             Estado = "Registrada",
             Prioridad = string.IsNullOrWhiteSpace(request.Prioridad) ? "Media" : request.Prioridad!,
@@ -98,7 +96,12 @@ public class IncidentsApiController : ControllerBase
         if (jurisdictionId.HasValue)
             query = query.Where(i => i.Ubicacion!.JurisdiccionId == jurisdictionId.Value);
 
-        if (mine == true)
+        if (!IsStaff)
+        {
+            var uid = CurrentUserId;
+            query = query.Where(i => i.UsuarioReportaId == uid);
+        }
+        else if (mine == true)
         {
             var uid = CurrentUserId;
             query = query.Where(i => i.UsuarioReportaId == uid);
@@ -119,6 +122,9 @@ public class IncidentsApiController : ControllerBase
 
         if (incidencia == null)
             return NotFound();
+
+        if (!IsStaff && incidencia.UsuarioReportaId != CurrentUserId)
+            return StatusCode(StatusCodes.Status403Forbidden);
 
         return Ok(ApiMappers.MapIncident(incidencia, Request, includeEvidencias: true));
     }
@@ -178,6 +184,13 @@ public class IncidentsApiController : ControllerBase
 
         if (incidencia == null)
             return NotFound();
+
+        var estadosValidos = new[] { "Registrada", "EnAnalisis", "Asignada", "EnProceso", "Cerrada", "Rechazada" };
+        if (!estadosValidos.Contains(request.Estado))
+        {
+            ModelState.AddModelError(nameof(request.Estado), "Estado inválido.");
+            return ValidationProblem(ModelState);
+        }
 
         incidencia.Estado = request.Estado;
 

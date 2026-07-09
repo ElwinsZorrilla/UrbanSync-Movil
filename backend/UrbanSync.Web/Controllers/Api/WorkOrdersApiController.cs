@@ -26,6 +26,8 @@ public class WorkOrdersApiController : ControllerBase
 
     private string CurrentUserId => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
 
+    private bool EsGestor => User.IsInRole("Administrador") || User.IsInRole("Supervisor");
+
     [HttpGet]
     public async Task<ActionResult<IEnumerable<WorkOrderDto>>> List(
         [FromQuery] string? technicianId,
@@ -104,6 +106,9 @@ public class WorkOrdersApiController : ControllerBase
         if (trabajo == null)
             return NotFound();
 
+        if (!EsGestor && trabajo.UsuarioAsignadoId != CurrentUserId)
+            return StatusCode(StatusCodes.Status403Forbidden);
+
         trabajo.Estado = "EnProgreso";
         trabajo.FechaInicio = DateTime.UtcNow;
 
@@ -124,6 +129,9 @@ public class WorkOrdersApiController : ControllerBase
 
         if (trabajo == null)
             return NotFound();
+
+        if (!EsGestor && trabajo.UsuarioAsignadoId != CurrentUserId)
+            return StatusCode(StatusCodes.Status403Forbidden);
 
         trabajo.Estado = "Finalizado";
         trabajo.FechaFin = DateTime.UtcNow;

@@ -71,4 +71,8 @@ class AuthController extends Notifier<AuthState> {
     await ref.read(tokenStorageProvider).clear();
     state = const AuthState(AuthStatus.unauthenticated);
   }
+
+  void markSessionExpired() {
+    state = const AuthState(AuthStatus.unauthenticated);
+  }
 }

@@ -70,7 +70,7 @@ class _IncidentDetailPageState extends ConsumerState<IncidentDetailPage> {
       imageQuality: 70,
       maxWidth: 1600,
     );
-    if (picked == null) return;
+    if (picked == null || !mounted) return;
 
     setState(() => _busy = true);
     double? lat;

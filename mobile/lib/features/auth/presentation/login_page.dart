@@ -100,7 +100,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     controller: _passwordController,
                     obscureText: _obscure,
                     prefixIcon: Icons.lock_outline,
-                    validator: Validators.password,
+                    validator: Validators.loginPassword,
                   ),
                   const SizedBox(height: 24),
                   PrimaryButton(

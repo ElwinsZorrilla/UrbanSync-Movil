@@ -18,6 +18,18 @@ class Validators {
     if (value == null || value.isEmpty) return 'La contraseña es obligatoria.';
     if (value.length < 6)
       return 'La contraseña debe tener al menos 6 caracteres.';
+    final hasUpper = value.contains(RegExp(r'[A-Z]'));
+    final hasLower = value.contains(RegExp(r'[a-z]'));
+    final hasDigit = value.contains(RegExp(r'\d'));
+    final hasSymbol = value.contains(RegExp(r'[^A-Za-z0-9]'));
+    if (!hasUpper || !hasLower || !hasDigit || !hasSymbol) {
+      return 'Incluye mayúscula, minúscula, número y símbolo.';
+    }
+    return null;
+  }
+
+  static String? loginPassword(String? value) {
+    if (value == null || value.isEmpty) return 'La contraseña es obligatoria.';
     return null;
   }
 

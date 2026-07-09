@@ -9,7 +9,7 @@ namespace UrbanSync.Web.Controllers.Api;
 
 [ApiController]
 [Route("api/reports")]
-[Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+[Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Administrador,Supervisor")]
 public class ReportsApiController : ControllerBase
 {
     private readonly ApplicationDbContext _db;
