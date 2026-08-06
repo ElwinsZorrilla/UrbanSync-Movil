@@ -533,16 +533,29 @@ Regla: **la UI oculta lo que el rol no puede hacer**, y aun así se maneja el 40
 
 ## §11. Verificación (gate de cada iteración)
 
-```bash
-# Correr SIEMPRE desde la junction ASCII (la ruta real tiene "é" y rompe el analysis server)
-cd /c/dev/urbansync-mobile
-export PATH="/c/src/flutter/bin:$PATH"
+> ⚠️ **Corrección (it. 1).** `C:\dev\urbansync-mobile` **NO es una junction**: es una **copia obsoleta del 9-jul**. Correr el gate ahí evalúa código viejo y da falsos verdes. La única junction en `C:\dev` es `urbansync`, y apunta a **otro** proyecto (`PROGRAMACION MOVIL\UrbanSync`).
+>
+> Tampoco sirve una junction nueva: Flutter **resuelve el enlace** a la ruta real y reaparecen los dos fallos:
+> 1. el **analysis server crashea** por la `é` de la ruta (lo que documenta el README), y
+> 2. **MAX_PATH**: `ios/Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage/Sources/FlutterGeneratedPluginSwiftPackage` supera los 260 caracteres y `flutter pub get`/`analyze` fallan con `errno 3`.
+>
+> **Procedimiento correcto:** espejar el proyecto a una ruta ASCII corta y correr el gate ahí.
 
+```bash
+# 1) Sincronizar la copia de trabajo (excluye build/.dart_tool/ephemeral/.gradle)
+node C:/tmp/sync_us_mobile.js          # mobile/ -> C:\dev\us-mobile
+
+# 2) Gate
+export PATH="/c/src/flutter/bin:$PATH"
+cd /c/dev/us-mobile
+flutter pub get
 dart format --set-exit-if-changed lib test
-flutter analyze                       # 0 issues nuevos vs baseline de Fase 0 (18)
+flutter analyze                       # 0 issues nuevos vs baseline (18 -> 17 tras it. 1)
 flutter test
 flutter build apk --debug             # solo en la iteración final de cada bloque
 ```
+
+> El código fuente **se edita siempre en `mobile/`** (la ruta real, la versionada). `C:\dev\us-mobile` es solo para ejecutar el gate; nunca se edita ahí.
 
 **Tests mínimos por iteración:**
 - Unit: mapeo DTO→entidad (incluye enums desconocidos y nulls), `toQueryParameters()` de filtros, lógica de transiciones válidas.
@@ -561,8 +574,9 @@ Sin llamadas de red reales en tests. Nada de `Future.delayed` como sincronizaci�
 
 | It. | Objetivo | Archivos | Estado | Verificación | Commit |
 |---|---|---|---|---|---|
-| 0 | Reconocimiento: §2.2 y §2.3 completos | *(este .md)* | ☑ | n/a | *(pendiente)* |
-| 1 | Dominio: entidades, enums, filtros, contratos de repositorio | `domain/**` | ☐ | analyze + unit | |
+| 0 | Reconocimiento: §2.2, §2.3 y §2.4 completos | *(este .md)* | ☑ | n/a | `7e96203`, `69e1f26` |
+| 1 | **Habilitadores de backend + cambio de contraseña móvil** | `backend/**`, `auth/**` | ☑ | format + analyze 17 + test 20/20 + API en vivo | |
+| 2 | Dominio de auditoría e incidencias | `domain/**` | ☐ | analyze + unit | |
 | 2 | Datos: DTOs, datasources, impl de repositorios, mapeo de errores | `data/**` | ☐ | analyze + unit mapeo | |
 | 3 | Providers de incidencias (lista + detalle) con fakes probados | `presentation/providers/**` | ☐ | unit notifiers | |
 | 4 | Bandeja `/incidents` + tile + estados L/E/E + ruta | `pages/incidents_inbox_page.dart` | ☐ | widget test | |
@@ -575,7 +589,37 @@ Sin llamadas de red reales en tests. Nada de `Future.delayed` como sincronizaci�
 | 11 | Guards por rol + manejo de 401/403 + casos borde §10 | varios | ☐ | analyze + test | |
 | 12 | Pulido: formato, i18n, sin `print`, build APK verde | — | ☐ | build apk | |
 
-**Notas de la iteración actual (It. 0):**
+**Notas de la iteración 1 — habilitadores de backend + cambio de contraseña**
+
+Decisiones del humano aplicadas: (a) todo contra **el backend del repo `main`** (`backend/UrbanSync.Web`, `:8080`); (b) **controller nuevo + 2 columnas**; (c) la app **registra sus propios eventos** con `POST /api/activity` y **detalle estructurado**; (d) alcance añadido: **cambio de contraseña en móvil**.
+
+**Backend — 4 endpoints nuevos, los 20 existentes intactos (24 en Swagger):**
+
+| Ruta | Rol | Notas |
+|---|---|---|
+| `GET /api/activity` | `Administrador,Supervisor` | filtros `usuarioId`, `entidad`, `accion`, `fechaInicio`, `fechaFin`; valida `fechaInicio ≤ fechaFin` (400) |
+| `GET /api/activity/{id:int}` | `Administrador,Supervisor` | 404 `ProblemDetails` |
+| `POST /api/activity` | autenticado | `{accion, entidad, entidadId, detalle}`; el servidor pone `usuarioId` e `ipOrigen` |
+| `POST /api/auth/change-password` | autenticado | `{currentPassword, newPassword, confirmNewPassword}` → **204** |
+
+- **Contrato idéntico al del upstream** (`AuditResponse`), adaptado a este backend: `usuarioId` es **GUID string** (Identity), no `int`; roles `Administrador,Supervisor` (aquí no existe `SupervisorOperaciones`).
+- **Ventaja sobre el upstream:** `fechaHora` sale **con `Z`** (el `ValueConverter` del DbContext fuerza UTC) ⇒ el móvil sí puede aplicar `.toLocal()`. Y **la bitácora ya tiene datos reales**, porque `ActivityLogger` lleva tiempo escribiendo.
+- **Migración `20260806182048_AddActivityEntityColumns`** — **puramente aditiva**: `Entity NVARCHAR(80) NULL`, `EntityId INT NULL`, índices `(Entity, EntityId)` y `(CreatedAt)`. Se descartó una primera versión que estrechaba `Action`/`Description`/`IpAddress` porque EF avisaba de posible pérdida de datos.
+- `ActivityLogger.LogAsync` ahora acepta `entity`/`entityId` **opcionales** y devuelve la fila creada. Todas las llamadas previas siguen compilando sin cambios.
+- **Convención del detalle estructurado** (alimenta `AuditDiffView`): `Campo: antes → después`, varios separados por `; `. Ej.: `Incidencia INC-… . Estado: Asignada → EnProceso`. Valor ausente = `—`. **Round-trip UTF-8 de `→` verificado** contra la API viva.
+- Call sites actualizados para etiquetar `Entidad="Incidencias"` + `EntidadId`: crear incidencia, triage, cambio de estado, subir evidencia, y crear/iniciar/completar orden de trabajo. **Ningún contrato de endpoint cambió**, solo el texto del evento auditado.
+
+**Móvil:**
+- `auth_repository.changePassword(...)` + `AuthController.changePassword(...)` + `ChangePasswordPage` + ruta `/change-password` + botón en `ProfilePage`.
+- El **401 de "contraseña actual incorrecta" no cierra la sesión**: el interceptor de `dio_client` excluye las rutas que contienen `/api/auth/`, y `/api/auth/change-password` cae dentro. Verificado por lectura del guard; no requirió cambios.
+
+**Cambios fuera del módulo (§0.2), declarados:**
+- `mobile/test/widget_test.dart` **eliminado** — era la plantilla del contador de Flutter, referenciaba `MyApp` (inexistente) y era el único `error` del analyze y el test fallido del baseline. Resuelve **B8**. Sustituido por `change_password_page_test.dart`.
+- `profile_page.dart` y `router.dart`: solo se añadió la entrada de navegación.
+
+**Verificación (en `C:\dev\us-mobile`, ver §11):** `dart format --set-exit-if-changed` sin cambios · `flutter analyze` **17 issues, 0 errores** (baseline 18 con 1 error; ningún issue nuevo) · `flutter test` **20/20 en verde** (baseline 15 ✓ / 1 ✗) · backend compila con 0 warnings · los 8 flujos de los endpoints nuevos probados contra la API en Docker, con la contraseña semilla restaurada al final.
+
+**Notas de la iteración 0 (Fase 0):**
 
 - Se creó este archivo en la raíz del repo (no existía; el contenido venía en el prompt). Es el único artefacto de documentación permitido por §0.6.
 - **El backend NO está desplegado en Render.** Corre local vía `docker compose up -d` (SQL Server 2022 + API en `:8080`; Swagger en `/swagger`). Se levantó el stack y el contrato de §2.3 quedó **relevado por código fuente Y validado contra la API viva**: rutas de Swagger, cuerpo real de `GET /api/incidents`, formato de fecha con `Z`, ausencia de `X-Total-Count`, y formas de error 400/403/404. No queda validación pendiente.
@@ -599,9 +643,10 @@ Sin llamadas de red reales en tests. Nada de `Future.delayed` como sincronizaci�
 | **B5** | **El API no pagina.** `GET /api/incidents` devuelve un **array plano** completo, sin `page`/`pageSize`/`total`. Tampoco soporta `q` (texto), `from`/`to` (fechas), `assignedTo`, ni multi-valor de estado | **Scroll infinito y `Page<T>` (§4, §6, §8.1, iteración 5) no implementables server-side.** Búsqueda y rango de fechas tendrían que resolverse en cliente sobre todo el conjunto | ¿Paginación y búsqueda **en cliente** (simple, no escala), o se añaden `page`/`pageSize`/`q`/`from`/`to` al backend? |
 | **B6** | **`PATCH /api/incidents/{id}/status` no acepta comentario.** Body = `{estado}` únicamente | El comentario obligatorio al rechazar/cerrar (§8.2) **no se persiste en ningún lado** | ¿Se amplía `UpdateStatusRequest` con `comentario` (y dónde se guarda: `UserActivity.Description`, comentarios de B3, o nueva columna)? ¿O se quita el requisito? |
 | **B7** | **No hay endpoint para listar usuarios/técnicos.** Solo la vista MVC `UserManagementController.Index` (cookies + rol `Administrador`). No hay `GET /api/users?role=Tecnico` | El **buscador de técnicos** de `AssignTechnicianSheet` (§8.2) no tiene fuente de datos | ¿Se crea `GET /api/users?role=` en el backend, o se elimina la asignación desde el móvil? |
-| **B8** | **El gate de §11 ya arranca en rojo.** `flutter test` falla en `test/widget_test.dart` (plantilla del contador de Flutter, referencia `MyApp`, clase inexistente — la app es `UrbanSyncApp`). También es el único `error` del `flutter analyze` baseline | §0.3 prohíbe avanzar con tests fallando ⇒ **ninguna iteración podría cerrarse.** Arreglarlo toca un archivo fuera del módulo (§0.2) | ¿Autorizas borrar/corregir `test/widget_test.dart` (1 línea, cambio trivial fuera del módulo, se anotaría en §12)? Es la vía más limpia para desbloquear el gate |
-| **B9** | ~~Conflicto de alcance~~ → **RESUELTO por instrucción del humano**: no se toca el backend, se consumen los endpoints tal cual | B3, B4, B6, B7 quedan **fuera de alcance** (no hay endpoint y no se crea): sin comentarios, sin `/assign`, sin comentario en cambio de estado, sin buscador de técnicos | — (asignación de técnico solo sería posible si se apunta al backend actual vía `POST /api/work-orders`) |
-| **B10** | **¿A qué backend apunta la app?** Son dos APIs **incompatibles y complementarias**: · **actual** `backend/UrbanSync.Web` `:8080` → incidents + **evidences + catálogos + work-orders + reports**, **sin auditoría** · **nuevo** `src/backend/UrbanSync.Api` `:5119` (upstream) → incidents + **auditoría + roles + usuarios**, **sin evidences/catálogos/work-orders/reports** | **Apuntar al nuevo API habilita Auditoría pero rompe Reportar Incidencia (`/api/incident-types`, `/api/jurisdictions`), Evidencias, Triage y Dashboard** — viola §0.2. Además los **roles cambian** (`Supervisor`/`Tecnico` ya no existen ⇒ `AppUser.roleGroup` manda a todos a `citizen`) y `usuarioId` pasa de GUID a `int` | **Decisión raíz nueva.** Tres caminos: **(a)** apuntar al API nuevo y aceptar que se rompen 4 pantallas; **(b)** mantener `:8080` y que el módulo de auditoría hable con `:5119` en paralelo (dos `baseUrl`, dos tokens — los JWT no son intercambiables); **(c)** integrar el upstream (`git merge rrivas/main --allow-unrelated-histories`, reestructuración mayor con `mobile/` + `src/mobile/` duplicados). **¿Cuál?** |
+| ~~B8~~ | ~~El gate arranca en rojo~~ | **RESUELTO** (it. 1): `test/widget_test.dart` eliminado. Gate: analyze **17 issues / 0 errores**, test **20/20** | — |
+| **B11** | **La ruta del proyecto rompe el gate de Flutter**, por dos causas independientes: la `é` crashea el *analysis server*, y `ios/Flutter/ephemeral/…/FlutterGeneratedPluginSwiftPackage` supera **MAX_PATH** (`errno 3`). Una junction no lo evita: Flutter resuelve el enlace a la ruta real | Sin mitigación no se puede correr `analyze`/`test`. **Mitigado** con la copia espejo `C:\dev\us-mobile` (§11). Ojo: `C:\dev\urbansync-mobile` es una **copia obsoleta**, no una junction — usarla da falsos verdes | Nada urgente. Para eliminar la fricción de raíz: mover el repo fuera de OneDrive a una ruta ASCII corta, o habilitar `LongPathsEnabled` (requiere admin) |
+| **B9** | ~~Conflicto de alcance~~ → **RESUELTO**: se trabaja contra el backend del repo `main`, **sin modificar endpoints existentes**; los que faltaban se **crearon** (autorizado por `CLAUDE.md` §5 y por decisión explícita del humano) | B3, B4, B6, B7 siguen **fuera de alcance** salvo nueva decisión: sin comentarios, sin `/assign`, sin comentario en cambio de estado, sin buscador de técnicos | La asignación a técnico es viable hoy vía `POST /api/work-orders` (§13-B4) si se quiere incluir |
+| ~~B10~~ | ~~¿A qué backend apunta la app?~~ | **RESUELTO**: **el backend del repo `main`** (`backend/UrbanSync.Web`, `:8080`). No se integra el upstream ni se apunta a `:5119`. Ninguna pantalla existente se rompe y los roles siguen siendo `Administrador/Supervisor/Tecnico/Ciudadano` | — |
 
 ---
 

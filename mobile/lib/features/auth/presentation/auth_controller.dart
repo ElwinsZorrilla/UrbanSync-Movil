@@ -67,6 +67,20 @@ class AuthController extends Notifier<AuthState> {
         );
   }
 
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+    required String confirmNewPassword,
+  }) {
+    return ref
+        .read(authRepositoryProvider)
+        .changePassword(
+          currentPassword: currentPassword,
+          newPassword: newPassword,
+          confirmNewPassword: confirmNewPassword,
+        );
+  }
+
   Future<void> logout() async {
     await ref.read(tokenStorageProvider).clear();
     state = const AuthState(AuthStatus.unauthenticated);

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../app/theme.dart';
 import '../../../shared/widgets/app_card.dart';
@@ -69,6 +70,12 @@ class ProfilePage extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 24),
+          SecondaryButton(
+            label: 'Cambiar contraseña',
+            icon: Icons.lock_reset_outlined,
+            onPressed: () => context.push('/change-password'),
+          ),
+          const SizedBox(height: 12),
           SecondaryButton(
             label: 'Cerrar sesión',
             icon: Icons.logout,

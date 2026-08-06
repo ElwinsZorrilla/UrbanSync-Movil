@@ -56,6 +56,25 @@ class AuthRepository {
     }
   }
 
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+    required String confirmNewPassword,
+  }) async {
+    try {
+      await _dio.post<void>(
+        '/api/auth/change-password',
+        data: {
+          'currentPassword': currentPassword,
+          'newPassword': newPassword,
+          'confirmNewPassword': confirmNewPassword,
+        },
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
   Future<AppUser> me() async {
     try {
       final response = await _dio.get<Map<String, dynamic>>('/api/auth/me');
