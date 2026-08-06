@@ -13,6 +13,8 @@ import '../../../shared/widgets/app_card.dart';
 import '../../../shared/widgets/buttons.dart';
 import '../../../shared/widgets/state_views.dart';
 import '../../../shared/widgets/status_chip.dart';
+import '../../audit/presentation/audit_providers.dart';
+import '../../audit/presentation/incident_audit_section.dart';
 import '../../auth/domain/app_user.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../data/incidents_repository.dart';
@@ -106,7 +108,10 @@ class _IncidentDetailPageState extends ConsumerState<IncidentDetailPage> {
     }
   }
 
-  void _refresh() => ref.invalidate(incidentDetailProvider(widget.incidentId));
+  void _refresh() {
+    ref.invalidate(incidentDetailProvider(widget.incidentId));
+    ref.invalidate(incidentAuditProvider(widget.incidentId));
+  }
 
   void _toast(String message, Color color) {
     if (!mounted) return;
@@ -119,20 +124,51 @@ class _IncidentDetailPageState extends ConsumerState<IncidentDetailPage> {
   Widget build(BuildContext context) {
     final async = ref.watch(incidentDetailProvider(widget.incidentId));
     final user = ref.watch(authControllerProvider).user;
+    final puedeAuditar = user?.isManager ?? false;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Detalle de incidencia')),
-      body: async.when(
-        loading: () => const LoadingView(),
-        error: (error, _) => ErrorView(
-          message: error is ApiException
-              ? error.message
-              : 'No se pudo cargar la incidencia.',
-          onRetry: _refresh,
-        ),
-        data: (incident) => _content(incident, user),
+    final body = async.when(
+      loading: () => const LoadingView(),
+      error: (error, _) => ErrorView(
+        message: error is ApiException
+            ? error.message
+            : 'No se pudo cargar la incidencia.',
+        onRetry: _refresh,
       ),
-      bottomNavigationBar: user == null ? null : _actionBar(async.value, user),
+      data: (incident) => _content(incident, user),
+    );
+
+    if (!puedeAuditar) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Detalle de incidencia')),
+        body: body,
+        bottomNavigationBar: user == null
+            ? null
+            : _actionBar(async.value, user),
+      );
+    }
+
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Detalle de incidencia'),
+          bottom: const TabBar(
+            tabs: [
+              Tab(text: 'Info', icon: Icon(Icons.info_outline, size: 20)),
+              Tab(text: 'Auditoría', icon: Icon(Icons.history, size: 20)),
+            ],
+          ),
+        ),
+        body: TabBarView(
+          children: [
+            body,
+            IncidentAuditSection(incidentId: widget.incidentId),
+          ],
+        ),
+        bottomNavigationBar: user == null
+            ? null
+            : _actionBar(async.value, user),
+      ),
     );
   }
 

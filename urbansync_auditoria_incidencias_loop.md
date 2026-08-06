@@ -575,8 +575,9 @@ Sin llamadas de red reales en tests. Nada de `Future.delayed` como sincronizaci�
 | It. | Objetivo | Archivos | Estado | Verificación | Commit |
 |---|---|---|---|---|---|
 | 0 | Reconocimiento: §2.2, §2.3 y §2.4 completos | *(este .md)* | ☑ | n/a | `7e96203`, `69e1f26` |
-| 1 | **Habilitadores de backend + cambio de contraseña móvil** | `backend/**`, `auth/**` | ☑ | format + analyze 17 + test 20/20 + API en vivo | |
-| 2 | Dominio de auditoría e incidencias | `domain/**` | ☐ | analyze + unit | |
+| 1 | **Habilitadores de backend + cambio de contraseña móvil** | `backend/**`, `auth/**` | ☑ | format + analyze 17 + test 20/20 + API en vivo | backend → **PR #6** (`feature/api-auditoria`) · móvil → `6eecfeb` |
+| 2 | **Auditoría: dominio + datos + providers** | `features/audit/{domain,data,presentation}` | ☑ | analyze 17 + test 35/35 | `d4a9a62` |
+| 3 | **Timeline + `AuditDiffView` en el detalle** | `audit/presentation/widgets/**` | ☑ | analyze 17 + test 40/40 | |
 | 2 | Datos: DTOs, datasources, impl de repositorios, mapeo de errores | `data/**` | ☐ | analyze + unit mapeo | |
 | 3 | Providers de incidencias (lista + detalle) con fakes probados | `presentation/providers/**` | ☐ | unit notifiers | |
 | 4 | Bandeja `/incidents` + tile + estados L/E/E + ruta | `pages/incidents_inbox_page.dart` | ☐ | widget test | |
@@ -588,6 +589,17 @@ Sin llamadas de red reales en tests. Nada de `Future.delayed` como sincronizaci�
 | 10 | Bitácora global `/audit` + filtros + detalle `/audit/:id` | `pages/audit_*.dart` | ☐ | widget test | *desbloqueada; depende de §13-B10* |
 | 11 | Guards por rol + manejo de 401/403 + casos borde §10 | varios | ☐ | analyze + test | |
 | 12 | Pulido: formato, i18n, sin `print`, build APK verde | — | ☐ | build apk | |
+
+**Notas de las iteraciones 2 y 3 — auditoría móvil**
+
+- **El backend vive en su propia rama.** Por decisión del humano, `backend/**` se movió a **`feature/api-auditoria`** → **PR #6**, y `main` quedó **solo con móvil + este `.md`** (verificado: `git diff origin/main..main -- backend/` está vacío). Respaldo del commit mixto original en la rama `respaldo/it1-mixto`.
+- **Dominio** (`features/audit/domain/`): `AuditEntry` con `kind` derivado; acción desconocida → `AuditActionKind.desconocida` en vez de lanzar (§5). `AuditChange.parse` extrae `Campo: antes → después` del `detalle` libre, ignora el prefijo de la frase, admite varios cambios separados por `;` y trata `—` como ausencia. `AuditFilter` inmutable, `toQueryParameters()` omite nulos y manda fechas en UTC ISO-8601; `copyWith` puede **limpiar** campos (centinela `_unset`).
+- **Datos**: `AuditRepository` sobre el `dio` compartido. `forIncident(id)` pide `?entidad=Incidencias` y **filtra `entidadId` en cliente**, porque el API no expone ese filtro.
+- **Estado**: `auditFilterProvider` (`Notifier`), `auditLogProvider`, `incidentAuditProvider.family`, `auditEntryProvider.family` — convención del repo, sin `AsyncNotifier`.
+- **UI**: `AuditTimeline` + `AuditTimelineTile` (icono y color por acción, actor, tiempo relativo, tap → despliega el diff y la fecha absoluta) y `AuditDiffView` (antes tachado en rojo, después en verde, `—` para nulos).
+- **Integración en el detalle existente** (§1 "extender, no duplicar"): `IncidentDetailPage` gana `TabBar` **Info · Auditoría**, y la pestaña **solo aparece para `isManager`**, que es quien puede leer `/api/activity` (§9). Para los demás roles la pantalla queda exactamente como estaba. `_refresh()` ahora invalida detalle **y** auditoría, así que el timeline refleja el cambio de estado recién hecho (§6).
+- **Shared**: `formatRelative` y `formatDayHeader` añadidos a `shared/utils/formatters.dart` (§0.4: utilidad genérica → va a `shared/`).
+- Pendiente del sub-módulo: bitácora global `/audit`, `AuditFilterSheet`, detalle `/audit/:id` y el registro de eventos propios de la app vía `POST /api/activity`.
 
 **Notas de la iteración 1 — habilitadores de backend + cambio de contraseña**
 
