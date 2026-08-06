@@ -1,9 +1,9 @@
 # UrbanSync Mobile — Módulo **Auditoría e Incidencias**
 ### Especificación de Loop Engineering para agente de código
 
-> **Para el agente:** este archivo es tu única fuente de verdad y también tu estado.
-> Lo lees al inicio de cada iteración y lo **actualizas** (sección §12) al final de cada una.
-> No escribes ni un `.dart` antes de completar la **Fase 0**.
+> **Nota:** este archivo es la única fuente de verdad del módulo y también su estado.
+> Se lee al inicio de cada iteración y se **actualiza** (sección §12) al final de cada una.
+> No se escribe ni un `.dart` antes de completar la **Fase 0**.
 
 ---
 
@@ -168,7 +168,7 @@ PATCH  /api/work-orders/{id}/start                          PATCH /api/work-orde
 
 `git pull` sobre `origin/main` → **"Already up to date"**. `origin` (github.com/ElwinsZorrilla/UrbanSync-Movil) solo tiene `main` en `39aee7c`. Los endpoints de auditoría están en el **upstream `rrivas`** (github.com/rrivas-unapec/UrbanSync), rama **`rrivas/main`** (`b8c8bf0`, 28 commits).
 
-> ⚠️ **`git merge-base main rrivas/main` no devuelve nada: las historias NO están relacionadas.** Además el árbol upstream está reestructurado (`src/backend/`, `src/web/`, `src/mobile/`) y **ya no contiene `mobile/` ni `backend/`**. Un `git pull rrivas main` exigiría `--allow-unrelated-histories` y dejaría **dos copias** de la app (nuestra `mobile/` + `src/mobile/`). **No ejecutado**: es una decisión estructural del humano (§13-B10).
+> ⚠️ **`git merge-base main rrivas/main` no devuelve nada: las historias NO están relacionadas.** Además el árbol upstream está reestructurado (`src/backend/`, `src/web/`, `src/mobile/`) y **ya no contiene `mobile/` ni `backend/`**. Un `git pull rrivas main` exigiría `--allow-unrelated-histories` y dejaría **dos copias** de la app (nuestra `mobile/` + `src/mobile/`). **No ejecutado**: es una decisión estructural pendiente (§13-B10).
 
 **Contrato REAL de auditoría** (`src/backend/UrbanSync.Api/Controllers/ActivityController.cs`) — **a consumir tal cual, sin modificar**:
 
@@ -566,7 +566,7 @@ Sin llamadas de red reales en tests. Nada de `Future.delayed` como sincronizaci�
 
 ---
 
-## §12. Estado del loop *(el agente edita esta sección)*
+## §12. Estado del loop
 
 **Baseline `flutter analyze` (Fase 0): `18` issues** — 17 `info` (lints de estilo: `unnecessary_underscores` ×6, `use_null_aware_elements` ×4, `curly_braces_in_flow_control_structures` ×4, `deprecated_member_use` ×1, `prefer_final_fields` ×1) + **1 `error`**: `test/widget_test.dart:16:35 creation_with_non_type — The name 'MyApp' isn't a class`.
 
@@ -592,7 +592,7 @@ Sin llamadas de red reales en tests. Nada de `Future.delayed` como sincronizaci�
 
 **Notas de las iteraciones 2 y 3 — auditoría móvil**
 
-- **El backend vive en su propia rama.** Por decisión del humano, `backend/**` se movió a **`feature/api-auditoria`** → **PR #6**, y `main` quedó **solo con móvil + este `.md`** (verificado: `git diff origin/main..main -- backend/` está vacío). Respaldo del commit mixto original en la rama `respaldo/it1-mixto`.
+- **El backend vive en su propia rama.** `backend/**` se movió a **`feature/api-auditoria`** → **PR #6**, y `main` quedó **solo con móvil + este `.md`** (verificado: `git diff origin/main..main -- backend/` está vacío). Respaldo del commit mixto original en la rama `respaldo/it1-mixto`.
 - **Dominio** (`features/audit/domain/`): `AuditEntry` con `kind` derivado; acción desconocida → `AuditActionKind.desconocida` en vez de lanzar (§5). `AuditChange.parse` extrae `Campo: antes → después` del `detalle` libre, ignora el prefijo de la frase, admite varios cambios separados por `;` y trata `—` como ausencia. `AuditFilter` inmutable, `toQueryParameters()` omite nulos y manda fechas en UTC ISO-8601; `copyWith` puede **limpiar** campos (centinela `_unset`).
 - **Datos**: `AuditRepository` sobre el `dio` compartido. `forIncident(id)` pide `?entidad=Incidencias` y **filtra `entidadId` en cliente**, porque el API no expone ese filtro.
 - **Estado**: `auditFilterProvider` (`Notifier`), `auditLogProvider`, `incidentAuditProvider.family`, `auditEntryProvider.family` — convención del repo, sin `AsyncNotifier`.
@@ -603,7 +603,7 @@ Sin llamadas de red reales en tests. Nada de `Future.delayed` como sincronizaci�
 
 **Notas de la iteración 1 — habilitadores de backend + cambio de contraseña**
 
-Decisiones del humano aplicadas: (a) todo contra **el backend del repo `main`** (`backend/UrbanSync.Web`, `:8080`); (b) **controller nuevo + 2 columnas**; (c) la app **registra sus propios eventos** con `POST /api/activity` y **detalle estructurado**; (d) alcance añadido: **cambio de contraseña en móvil**.
+Decisiones aplicadas: (a) todo contra **el backend del repo `main`** (`backend/UrbanSync.Web`, `:8080`); (b) **controller nuevo + 2 columnas**; (c) la app **registra sus propios eventos** con `POST /api/activity` y **detalle estructurado**; (d) alcance añadido: **cambio de contraseña en móvil**.
 
 **Backend — 4 endpoints nuevos, los 20 existentes intactos (24 en Swagger):**
 
@@ -641,11 +641,11 @@ Decisiones del humano aplicadas: (a) todo contra **el backend del repo `main`** 
 
 ---
 
-## §13. Bloqueos / decisiones pendientes *(el agente edita)*
+## §13. Bloqueos / decisiones pendientes
 
-> **Actualizado tras §2.4.** El API de auditoría **existe** (`/api/activity` ×3) — B1 queda **resuelto**. Pero vive en **otro backend, en un repo con historia no relacionada**, lo que abre B10. Instrucción vigente del humano: *"los endpoints existen, haz git pull y trata de no modificarlos"* ⇒ **se consumen tal cual; no se toca el backend.**
+> **Actualizado tras §2.4.** El API de auditoría **existe** (`/api/activity` ×3) — B1 queda **resuelto**. Pero vive en **otro backend, en un repo con historia no relacionada**, lo que abre B10. Instrucción vigente: *"los endpoints existen, haz git pull y trata de no modificarlos"* ⇒ **se consumen tal cual; no se toca el backend.**
 
-| # | Bloqueo | Impacto | Necesita del humano |
+| # | Bloqueo | Impacto | Decisión requerida |
 |---|---|---|---|
 | ~~B1~~ | ~~No existe API de auditoría~~ | **RESUELTO** — existen `GET /api/activity`, `GET /api/activity/{id}`, `POST /api/activity` en `rrivas/main` (§2.4). El timeline por incidencia es viable vía `entidad`+`entidadId` (filtrando `entidadId` en cliente) | — |
 | **B2** | **Sigue sin haber diff.** `AuditoriaAccesos.Detalle` es `NVARCHAR(400)` de texto libre; no hay `oldValues`/`newValues` ni acción tipada | **`AuditDiffView` (§8.3, §8.5) no tiene datos que renderizar.** Sin tocar el backend, la única vía es que el móvil escriba el "antes → después" **dentro de `detalle`** con un formato convenido (ej. `Estado: Asignada → EnProceso`) y el cliente lo parsee | ¿Se acepta el diff derivado de `detalle` con formato convenido (funciona solo para eventos que escriba la app), o `AuditDiffView` se recorta del alcance? |
@@ -657,12 +657,12 @@ Decisiones del humano aplicadas: (a) todo contra **el backend del repo `main`** 
 | **B7** | **No hay endpoint para listar usuarios/técnicos.** Solo la vista MVC `UserManagementController.Index` (cookies + rol `Administrador`). No hay `GET /api/users?role=Tecnico` | El **buscador de técnicos** de `AssignTechnicianSheet` (§8.2) no tiene fuente de datos | ¿Se crea `GET /api/users?role=` en el backend, o se elimina la asignación desde el móvil? |
 | ~~B8~~ | ~~El gate arranca en rojo~~ | **RESUELTO** (it. 1): `test/widget_test.dart` eliminado. Gate: analyze **17 issues / 0 errores**, test **20/20** | — |
 | **B11** | **La ruta del proyecto rompe el gate de Flutter**, por dos causas independientes: la `é` crashea el *analysis server*, y `ios/Flutter/ephemeral/…/FlutterGeneratedPluginSwiftPackage` supera **MAX_PATH** (`errno 3`). Una junction no lo evita: Flutter resuelve el enlace a la ruta real | Sin mitigación no se puede correr `analyze`/`test`. **Mitigado** con la copia espejo `C:\dev\us-mobile` (§11). Ojo: `C:\dev\urbansync-mobile` es una **copia obsoleta**, no una junction — usarla da falsos verdes | Nada urgente. Para eliminar la fricción de raíz: mover el repo fuera de OneDrive a una ruta ASCII corta, o habilitar `LongPathsEnabled` (requiere admin) |
-| **B9** | ~~Conflicto de alcance~~ → **RESUELTO**: se trabaja contra el backend del repo `main`, **sin modificar endpoints existentes**; los que faltaban se **crearon** (autorizado por `CLAUDE.md` §5 y por decisión explícita del humano) | B3, B4, B6, B7 siguen **fuera de alcance** salvo nueva decisión: sin comentarios, sin `/assign`, sin comentario en cambio de estado, sin buscador de técnicos | La asignación a técnico es viable hoy vía `POST /api/work-orders` (§13-B4) si se quiere incluir |
+| **B9** | ~~Conflicto de alcance~~ → **RESUELTO**: se trabaja contra el backend del repo `main`, **sin modificar endpoints existentes**; los que faltaban se **crearon** (autorizado por el flujo de trabajo del repo y por decisión explícita) | B3, B4, B6, B7 siguen **fuera de alcance** salvo nueva decisión: sin comentarios, sin `/assign`, sin comentario en cambio de estado, sin buscador de técnicos | La asignación a técnico es viable hoy vía `POST /api/work-orders` (§13-B4) si se quiere incluir |
 | ~~B10~~ | ~~¿A qué backend apunta la app?~~ | **RESUELTO**: **el backend del repo `main`** (`backend/UrbanSync.Web`, `:8080`). No se integra el upstream ni se apunta a `:5119`. Ninguna pantalla existente se rompe y los roles siguen siendo `Administrador/Supervisor/Tecnico/Ciudadano` | — |
 
 ---
 
-## §14. Prompt de arranque (pegar en Claude Code, dentro del repo)
+## §14. Prompt de arranque
 
 ```
 Lee urbansync_auditoria_incidencias_loop.md completo y ejecútalo como loop.
