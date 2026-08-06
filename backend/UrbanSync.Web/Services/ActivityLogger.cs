@@ -15,14 +15,18 @@ public class ActivityLogger
         _httpContextAccessor = httpContextAccessor;
     }
 
-    public async Task LogAsync(string action, string description)
+    public async Task<UserActivity?> LogAsync(
+        string action,
+        string description,
+        string? entity = null,
+        int? entityId = null)
     {
         var httpContext = _httpContextAccessor.HttpContext;
 
         var userId = httpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier);
 
         if (string.IsNullOrEmpty(userId))
-            return;
+            return null;
 
         var ip = httpContext?.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
 
@@ -31,11 +35,15 @@ public class ActivityLogger
             UserId = userId,
             Action = action,
             Description = description,
+            Entity = entity,
+            EntityId = entityId,
             IpAddress = ip,
             CreatedAt = DateTime.UtcNow
         };
 
         _context.UserActivities.Add(activity);
         await _context.SaveChangesAsync();
+
+        return activity;
     }
 }

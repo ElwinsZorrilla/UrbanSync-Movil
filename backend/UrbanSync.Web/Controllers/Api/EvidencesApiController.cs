@@ -95,7 +95,11 @@ public class EvidencesApiController : ControllerBase
 
         _db.Evidencias.Add(evidencia);
         await _db.SaveChangesAsync();
-        await _activityLogger.LogAsync("Evidencia", $"Evidencia subida a incidencia #{incidentId}.");
+        await _activityLogger.LogAsync(
+            "Evidencia",
+            $"Evidencia {evidencia.TipoEvidencia} subida a la incidencia {incidencia.CodigoCaso}.",
+            "Incidencias",
+            incidentId);
 
         var guardada = await _db.Evidencias
             .Include(e => e.UsuarioSube)

@@ -24,6 +24,8 @@ public class IncidentsApiController : ControllerBase
         _activityLogger = activityLogger;
     }
 
+    private const string EntidadIncidencias = "Incidencias";
+
     private string CurrentUserId => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
 
     private bool IsStaff =>
@@ -68,7 +70,11 @@ public class IncidentsApiController : ControllerBase
         _db.Incidencias.Add(incidencia);
         await _db.SaveChangesAsync();
 
-        await _activityLogger.LogAsync("Reporte de incidencia", $"Incidencia {incidencia.CodigoCaso} registrada.");
+        await _activityLogger.LogAsync(
+            "Reporte de incidencia",
+            $"Incidencia {incidencia.CodigoCaso} registrada. Estado: — → {incidencia.Estado}",
+            EntidadIncidencias,
+            incidencia.Id);
 
         var dto = await LoadDtoAsync(incidencia.Id, includeEvidencias: false);
         return CreatedAtAction(nameof(GetById), new { id = incidencia.Id }, dto);
@@ -140,6 +146,9 @@ public class IncidentsApiController : ControllerBase
         if (incidencia == null)
             return NotFound();
 
+        var estadoAnterior = incidencia.Estado;
+        var prioridadAnterior = incidencia.Prioridad;
+
         if (request.TipoIncidenciaId.HasValue)
         {
             var tipo = await _db.TiposIncidencia.FindAsync(request.TipoIncidenciaId.Value);
@@ -171,7 +180,17 @@ public class IncidentsApiController : ControllerBase
             incidencia.FechaAsignacion = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
-        await _activityLogger.LogAsync("Triage", $"Incidencia {incidencia.CodigoCaso} analizada ({incidencia.Estado}).");
+
+        var cambios = new List<string> { $"Estado: {estadoAnterior} → {incidencia.Estado}" };
+
+        if (prioridadAnterior != incidencia.Prioridad)
+            cambios.Add($"Prioridad: {prioridadAnterior} → {incidencia.Prioridad}");
+
+        await _activityLogger.LogAsync(
+            "Triage",
+            $"Incidencia {incidencia.CodigoCaso} analizada. {string.Join("; ", cambios)}",
+            EntidadIncidencias,
+            incidencia.Id);
 
         return Ok(await LoadDtoAsync(incidencia.Id, includeEvidencias: false));
     }
@@ -192,13 +211,18 @@ public class IncidentsApiController : ControllerBase
             return ValidationProblem(ModelState);
         }
 
+        var estadoAnterior = incidencia.Estado;
         incidencia.Estado = request.Estado;
 
         if (request.Estado == "Cerrada")
             incidencia.FechaCierre = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
-        await _activityLogger.LogAsync("Cambio de estado", $"Incidencia {incidencia.CodigoCaso} → {incidencia.Estado}.");
+        await _activityLogger.LogAsync(
+            "Cambio de estado",
+            $"Incidencia {incidencia.CodigoCaso}. Estado: {estadoAnterior} → {incidencia.Estado}",
+            EntidadIncidencias,
+            incidencia.Id);
 
         return Ok(await LoadDtoAsync(incidencia.Id, includeEvidencias: false));
     }

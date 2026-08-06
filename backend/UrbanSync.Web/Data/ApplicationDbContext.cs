@@ -28,6 +28,13 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     {
         base.OnModelCreating(builder);
 
+        builder.Entity<UserActivity>(entity =>
+        {
+            entity.Property(a => a.Entity).HasMaxLength(80);
+            entity.HasIndex(a => new { a.Entity, a.EntityId });
+            entity.HasIndex(a => a.CreatedAt);
+        });
+
         builder.Entity<Jurisdiccion>()
             .HasOne(j => j.JurisdiccionPadre)
             .WithMany()

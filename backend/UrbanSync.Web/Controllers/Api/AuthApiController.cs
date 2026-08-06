@@ -16,11 +16,16 @@ public class AuthApiController : ControllerBase
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly JwtTokenService _jwt;
+    private readonly ActivityLogger _activityLogger;
 
-    public AuthApiController(UserManager<ApplicationUser> userManager, JwtTokenService jwt)
+    public AuthApiController(
+        UserManager<ApplicationUser> userManager,
+        JwtTokenService jwt,
+        ActivityLogger activityLogger)
     {
         _userManager = userManager;
         _jwt = jwt;
+        _activityLogger = activityLogger;
     }
 
     [HttpPost("register")]
@@ -76,6 +81,40 @@ public class AuthApiController : ControllerBase
             ExpiresAt = expiresAt,
             User = MapUser(user, roles.FirstOrDefault() ?? string.Empty)
         });
+    }
+
+    [HttpPost("change-password")]
+    public async Task<IActionResult> ChangePassword(ChangePasswordRequest request)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized(new ProblemDetails { Title = "Usuario no identificado", Detail = "No fue posible identificar al usuario autenticado." });
+
+        var user = await _userManager.FindByIdAsync(userId);
+
+        if (user == null)
+            return NotFound(new ProblemDetails { Title = "Usuario no encontrado", Detail = "La cuenta asociada a la sesión ya no existe." });
+
+        var result = await _userManager.ChangePasswordAsync(user, request.CurrentPassword, request.NewPassword);
+
+        if (!result.Succeeded)
+        {
+            if (result.Errors.Any(e => e.Code == nameof(IdentityErrorDescriber.PasswordMismatch)))
+                return Unauthorized(new ProblemDetails { Title = "Contraseña actual incorrecta", Detail = "La contraseña actual no es válida." });
+
+            foreach (var error in result.Errors)
+                ModelState.AddModelError(nameof(request.NewPassword), error.Description);
+
+            return ValidationProblem(ModelState);
+        }
+
+        await _activityLogger.LogAsync(
+            "Cambio de contraseña",
+            $"El usuario {user.Email} cambió su contraseña.",
+            "Usuarios");
+
+        return NoContent();
     }
 
     [HttpGet("me")]

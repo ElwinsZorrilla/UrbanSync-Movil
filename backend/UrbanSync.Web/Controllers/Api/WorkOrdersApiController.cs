@@ -74,11 +74,16 @@ public class WorkOrdersApiController : ControllerBase
 
         _db.Trabajos.Add(trabajo);
 
+        var estadoAnterior = incidencia.Estado;
         incidencia.Estado = "Asignada";
         incidencia.FechaAsignacion = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
-        await _activityLogger.LogAsync("Orden de trabajo", $"Trabajo creado para incidencia {incidencia.CodigoCaso}.");
+        await _activityLogger.LogAsync(
+            "Orden de trabajo",
+            $"Trabajo #{trabajo.Id} creado para la incidencia {incidencia.CodigoCaso}. Estado: {estadoAnterior} → {incidencia.Estado}",
+            "Incidencias",
+            incidencia.Id);
 
         return CreatedAtAction(nameof(GetById), new { id = trabajo.Id }, await LoadDtoAsync(trabajo.Id));
     }
@@ -112,11 +117,17 @@ public class WorkOrdersApiController : ControllerBase
         trabajo.Estado = "EnProgreso";
         trabajo.FechaInicio = DateTime.UtcNow;
 
+        var estadoAnterior = trabajo.Incidencia?.Estado;
+
         if (trabajo.Incidencia != null)
             trabajo.Incidencia.Estado = "EnProceso";
 
         await _db.SaveChangesAsync();
-        await _activityLogger.LogAsync("Orden de trabajo", $"Trabajo #{trabajo.Id} iniciado.");
+        await _activityLogger.LogAsync(
+            "Orden de trabajo",
+            $"Trabajo #{trabajo.Id} iniciado. Estado: {estadoAnterior ?? "—"} → {trabajo.Incidencia?.Estado ?? "—"}",
+            "Incidencias",
+            trabajo.IncidenciaId);
 
         return Ok(await LoadDtoAsync(trabajo.Id));
     }
@@ -140,6 +151,8 @@ public class WorkOrdersApiController : ControllerBase
         if (!string.IsNullOrWhiteSpace(request.DescripcionTrabajo))
             trabajo.DescripcionTrabajo = request.DescripcionTrabajo!;
 
+        var estadoAnterior = trabajo.Incidencia?.Estado;
+
         if (trabajo.Incidencia != null)
         {
             trabajo.Incidencia.Estado = "Cerrada";
@@ -147,7 +160,11 @@ public class WorkOrdersApiController : ControllerBase
         }
 
         await _db.SaveChangesAsync();
-        await _activityLogger.LogAsync("Orden de trabajo", $"Trabajo #{trabajo.Id} finalizado.");
+        await _activityLogger.LogAsync(
+            "Orden de trabajo",
+            $"Trabajo #{trabajo.Id} finalizado. Estado: {estadoAnterior ?? "—"} → {trabajo.Incidencia?.Estado ?? "—"}",
+            "Incidencias",
+            trabajo.IncidenciaId);
 
         return Ok(await LoadDtoAsync(trabajo.Id));
     }

@@ -12,6 +12,10 @@ public class UserActivity
 
     public string Description { get; set; } = string.Empty;
 
+    public string? Entity { get; set; }
+
+    public int? EntityId { get; set; }
+
     public string IpAddress { get; set; } = string.Empty;
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
