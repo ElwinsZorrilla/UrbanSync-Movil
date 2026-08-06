@@ -164,6 +164,67 @@ PATCH  /api/work-orders/{id}/start                          PATCH /api/work-orde
 - **Claim de rol en el JWT**: `ClaimTypes.Role` = `http://schemas.microsoft.com/ws/2008/06/identity/claims/role` (`JwtTokenService.cs:40`). Valores literales sembrados: **`Administrador`**, **`Supervisor`**, **`Tecnico`** (sin tilde), **`Ciudadano`**. También lleva `sub`, `jti`, `nameidentifier`, `name`, `email`. Emisor `UrbanSync`, audiencia `UrbanSyncMobile`, expiración 480 min. `Program.cs` valida issuer, audience, lifetime y firma. **El móvil no decodifica el JWT**: usa `role` de `GET /api/auth/me` (solo el **primer** rol, `roles.FirstOrDefault()`).
 - **Diff de auditoría: NO APLICA.** Lo único que existe es la tabla `UserActivity` (`Models/UserActivity.cs`) con `{Id, UserId, User, Action, Description, IpAddress, CreatedAt}`. `Action` es una **frase libre en español** (`"Reporte de incidencia"`, `"Triage"`, `"Cambio de estado"`, `"Evidencia"`, `"Orden de trabajo"`, `"Creación de usuario"`, `"Cambio de estado de usuario"`) y `Description` es texto humano (`"Incidencia INC-… → Cerrada."`). **No hay** `entityType`, `entityId`, `actorRole`, `source`, `changes`, `oldValues`/`newValues`. La única superficie de lectura es la **vista MVC** `ActivityController.Index` (`[Authorize(Roles="Administrador,Supervisor")]`, cookies, `Take(100)`, sin API JSON y sin filtros).
 
+### 2.4 Segundo relevamiento — el API de auditoría **SÍ existe**, pero en otro backend
+
+`git pull` sobre `origin/main` → **"Already up to date"**. `origin` (github.com/ElwinsZorrilla/UrbanSync-Movil) solo tiene `main` en `39aee7c`. Los endpoints de auditoría están en el **upstream `rrivas`** (github.com/rrivas-unapec/UrbanSync), rama **`rrivas/main`** (`b8c8bf0`, 28 commits).
+
+> ⚠️ **`git merge-base main rrivas/main` no devuelve nada: las historias NO están relacionadas.** Además el árbol upstream está reestructurado (`src/backend/`, `src/web/`, `src/mobile/`) y **ya no contiene `mobile/` ni `backend/`**. Un `git pull rrivas main` exigiría `--allow-unrelated-histories` y dejaría **dos copias** de la app (nuestra `mobile/` + `src/mobile/`). **No ejecutado**: es una decisión estructural del humano (§13-B10).
+
+**Contrato REAL de auditoría** (`src/backend/UrbanSync.Api/Controllers/ActivityController.cs`) — **a consumir tal cual, sin modificar**:
+
+| # | Método | Ruta | Query / Body | Respuesta | Rol |
+|---|---|---|---|---|---|
+| A1 | GET | `/api/activity` | `usuarioId` (int), `entidad` (string), `accion` (string), `fechaInicio` (DateTime), `fechaFin` (DateTime). **Sin `page`/`pageSize`, sin `entidadId`** | **array plano** de `AuditResponse`, orden `FechaHora DESC` | `Administrador,SupervisorOperaciones` |
+| A2 | GET | `/api/activity/{id:long}` | — | `AuditResponse`, o **404** `ProblemDetails{title:"Recurso no encontrado", detail:"No se encontró ningún registro de auditoría con el ID {id}."}` | `Administrador,SupervisorOperaciones` |
+| A3 | POST | `/api/activity` | `{accion, entidad, entidadId, detalle}` — `usuarioId` e `ipOrigen` los pone el servidor | `AuditResponse` (201) | **cualquier autenticado** |
+
+```jsonc
+// AuditResponse
+{ "id": 12,                    // long
+  "usuarioId": 3,              // int?  — ¡int, no GUID!
+  "nombreUsuario": "jperez",
+  "accion": "Actualizar",      // NVARCHAR(50), obligatorio
+  "entidad": "Incidencias",    // NVARCHAR(80), nullable
+  "entidadId": 7,              // int?   ← permite atar el evento a una incidencia
+  "detalle": "…",              // NVARCHAR(400), nullable, TEXTO LIBRE
+  "ipOrigen": "10.0.2.2",      // NVARCHAR(45), nullable
+  "fechaHora": "2026-08-06T14:22:31.123" }  // ⚠️ SIN sufijo Z
+```
+
+Esquema (`database/scripts/01_Epica1_UsuariosRolesPermisos.sql`):
+`AuditoriaAccesos(Id BIGINT IDENTITY, UsuarioId INT NULL, Accion NVARCHAR(50) NOT NULL, Entidad NVARCHAR(80) NULL, EntidadId INT NULL, Detalle NVARCHAR(400) NULL, IpOrigen NVARCHAR(45) NULL, FechaHora DATETIME2 NOT NULL DEFAULT SYSDATETIME())`.
+
+**Validaciones del `AuditService`** (devuelven `ArgumentException`): `accion` obligatoria y ≤50; `entidad` ≤80; `detalle` ≤400; `ipOrigen` ≤45; `entidadId > 0`; `usuarioId > 0`; `fechaInicio ≤ fechaFin`.
+
+**Tres consecuencias que cambian el diseño del módulo:**
+
+1. ✅ **`entidad` + `entidadId` existen** ⇒ el **timeline por incidencia (§8.3) SÍ es viable**: `GET /api/activity?entidad=Incidencias` y filtrar `entidadId == id` **en cliente** (el API no expone filtro por `entidadId`).
+2. ❌ **Sigue sin haber diff.** `Detalle` es un `NVARCHAR(400)` de texto libre; no hay `oldValues`/`newValues`. **`AuditDiffView` (§8.3, §8.5) sigue sin respaldo de datos** salvo que el propio móvil escriba el "antes → después" dentro de `detalle` con un formato convenido.
+3. ⛔ **Nadie escribe auditoría.** `IAuditService` solo se inyecta en `ActivityController`; `IncidentService` y el login **no** insertan filas, y el `ActivityLogger` del web nuevo **solo escribe a `ILogger`**, no a la BD. ⇒ **`GET /api/activity` devuelve `[]`** hasta que un cliente haga `POST /api/activity`. Para que el módulo muestre algo, **la app debe registrar sus propios eventos con A3** tras cada mutación. Eso es *consumir* el endpoint existente, no modificarlo.
+
+**⚠️ Fecha sin zona horaria:** `FechaHora` es `DATETIME2` con `DEFAULT SYSDATETIME()` (hora **local del servidor**) y el repositorio lo lee con `reader.GetDateTime()` → `Kind=Unspecified` → System.Text.Json lo emite **sin `Z`** → `DateTime.parse` de Dart lo interpreta como **hora local del teléfono**. Es el **comportamiento opuesto** al de `/api/incidents` del backend actual (que sí fuerza UTC). Hay que tratarlo explícitamente y **no** aplicarle `.toLocal()`.
+
+**El resto del API nuevo (`src/backend/UrbanSync.Api`, puerto `5119`) — 17 endpoints en total:**
+
+```
+POST  /api/auth/login · /api/auth/register · /api/auth/change-password
+GET   /api/incidents · /api/incidents/{id}      POST /api/incidents
+PATCH /api/incidents/{id}/status · /api/incidents/{id}/triage   [Administrador,SupervisorOperaciones,AnalistaTecnico]
+GET   /api/activity · /api/activity/{id}        POST /api/activity
+GET   /api/roles · /api/roles/{id}              POST /api/roles          [Administrador]
+GET   /api/usuarios · /api/usuarios/{id}        POST /api/usuarios
+PATCH /api/usuarios/{id}/toggle-status                                   [Administrador]
+```
+
+**NO tiene**: `/api/incidents/{id}/evidences`, `/api/incident-types`, `/api/jurisdictions`, `/api/institutions`, `/api/work-orders`, `/api/reports/summary` — **todos en uso hoy por la app** (reportar incidencia, evidencias, triage, dashboard).
+
+**Otras rupturas del API nuevo frente al actual:**
+
+- **Roles distintos.** Sembrados: `Administrador`, `GestorUbicacion`, `GestorEvidencias`, `AnalistaTecnico`, `SupervisorOperaciones`, `Ciudadano`. **Ya no existen `Supervisor` ni `Tecnico`** ⇒ `AppUser.roleGroup` (que mapea esos dos literales) haría caer **a todos** en `citizen`, ocultando toda la UI de gestión.
+- **`usuarioId` es `int`**, no el GUID de ASP.NET Identity.
+- `IncidentResponse` **sí es wire-compatible** con nuestro `Incident.fromJson` (mismos nombres camelCase), salvo que **no trae `evidencias`**. Por eso `incidents_repository.dart` es **byte-idéntico** entre nuestro repo y `src/mobile/` del upstream.
+- El `src/mobile/` upstream ya apunta a `http://10.0.2.2:5119/` y **no tiene `features/audit`** — el módulo de auditoría móvil está por construir (es justo este trabajo).
+
 **Salida de Fase 0:** tablas completas arriba + bloqueos en §13. Commit `chore(audit): fase 0 — contrato de API relevado`.
 
 ---
@@ -508,9 +569,9 @@ Sin llamadas de red reales en tests. Nada de `Future.delayed` como sincronizaci�
 | 5 | Filtros + búsqueda + paginación infinita | `incident_filter_sheet.dart` | ☐ | unit + widget | |
 | 6 | Detalle: cabecera, evidencia, tabs, deep-link | `incident_detail_page.dart` | ☐ | widget test | |
 | 7 | Acciones: cambio de estado, asignación, comentarios, adjuntos + invalidaciones | `widgets/*_sheet.dart` | ☐ | unit transiciones | |
-| 8 | Auditoría: dominio + datos + provider | `features/audit/{domain,data}/**` | ⛔ | bloqueada (§13-B1) | |
-| 9 | Timeline en el detalle + `AuditDiffView` | `widgets/audit_timeline.dart` | ⛔ | bloqueada (§13-B1/B2) | |
-| 10 | Bitácora global `/audit` + filtros + detalle `/audit/:id` | `pages/audit_*.dart` | ⛔ | bloqueada (§13-B1) | |
+| 8 | Auditoría: dominio + datos + provider (contra `/api/activity`) | `features/audit/{domain,data}/**` | ☐ | unit mapeo | *desbloqueada; depende de §13-B10* |
+| 9 | Timeline en el detalle (`entidad=Incidencias` + `entidadId`) | `widgets/audit_timeline.dart` | ☐ | widget test | *`AuditDiffView` pendiente de §13-B2* |
+| 10 | Bitácora global `/audit` + filtros + detalle `/audit/:id` | `pages/audit_*.dart` | ☐ | widget test | *desbloqueada; depende de §13-B10* |
 | 11 | Guards por rol + manejo de 401/403 + casos borde §10 | varios | ☐ | analyze + test | |
 | 12 | Pulido: formato, i18n, sin `print`, build APK verde | — | ☐ | build apk | |
 
@@ -526,17 +587,21 @@ Sin llamadas de red reales en tests. Nada de `Future.delayed` como sincronizaci�
 
 ## §13. Bloqueos / decisiones pendientes *(el agente edita)*
 
+> **Actualizado tras §2.4.** El API de auditoría **existe** (`/api/activity` ×3) — B1 queda **resuelto**. Pero vive en **otro backend, en un repo con historia no relacionada**, lo que abre B10. Instrucción vigente del humano: *"los endpoints existen, haz git pull y trata de no modificarlos"* ⇒ **se consumen tal cual; no se toca el backend.**
+
 | # | Bloqueo | Impacto | Necesita del humano |
 |---|---|---|---|
-| **B1** | **No existe API de auditoría.** Faltan `GET /api/audit`, `GET /api/audit/{id}` y `GET /api/incidents/{id}/audit`. Lo único existente es la vista MVC `ActivityController.Index` (cookies, rol Administrador/Supervisor, `Take(100)`, sin JSON, sin filtros) | **Sub-módulo Auditoría completo (§8.3, §8.4, §8.5 · iteraciones 8, 9, 10) inviable.** ~40 % del alcance del módulo | ¿Se añaden los 3 endpoints al backend (CLAUDE.md §5 del repo lo autoriza: *"crear los endpoints faltantes en el API respetando su arquitectura"*), o el sub-módulo se declara fuera de alcance? **La spec del loop dice "solo mobile" y "no simules"; el CLAUDE.md del repo dice que sí se crean endpoints. Conflicto a resolver.** |
-| **B2** | **El esquema de auditoría no soporta lo que pide la spec.** `UserActivity` solo tiene `{UserId, Action(frase libre), Description(texto), IpAddress, CreatedAt}`. No hay `entityType`, `entityId`, `actorRole`, `source`, ni `changes`/`oldValues`/`newValues` | Aun creando los endpoints de B1: **no se puede filtrar por entidad ni por incidencia**, no hay `AuditAction` tipada, y **`AuditDiffView` (§8.3, §8.5) es irrealizable** — no existe el "antes → después" | ¿Se acepta una auditoría degradada (lista global + filtro por actor/acción/fecha, sin diff y sin timeline por incidencia)? ¿O se migra el esquema (nuevas columnas + migración EF + escribir el diff en cada mutación)? |
+| ~~B1~~ | ~~No existe API de auditoría~~ | **RESUELTO** — existen `GET /api/activity`, `GET /api/activity/{id}`, `POST /api/activity` en `rrivas/main` (§2.4). El timeline por incidencia es viable vía `entidad`+`entidadId` (filtrando `entidadId` en cliente) | — |
+| **B2** | **Sigue sin haber diff.** `AuditoriaAccesos.Detalle` es `NVARCHAR(400)` de texto libre; no hay `oldValues`/`newValues` ni acción tipada | **`AuditDiffView` (§8.3, §8.5) no tiene datos que renderizar.** Sin tocar el backend, la única vía es que el móvil escriba el "antes → después" **dentro de `detalle`** con un formato convenido (ej. `Estado: Asignada → EnProceso`) y el cliente lo parsee | ¿Se acepta el diff derivado de `detalle` con formato convenido (funciona solo para eventos que escriba la app), o `AuditDiffView` se recorta del alcance? |
+| **B2b** | **`GET /api/activity` devuelve `[]`.** Nadie escribe auditoría: `IAuditService` solo se usa en `ActivityController`, y el `ActivityLogger` del web nuevo escribe a `ILogger`, no a la BD | Bitácora y timeline **salen vacíos** hasta que un cliente haga `POST /api/activity` | ¿Autorizas que la app registre sus propios eventos con `POST /api/activity` tras cada mutación (crear incidencia, cambiar estado, triage)? Es consumir el endpoint existente, no modificarlo |
 | **B3** | **No existe endpoint de comentarios** (`POST/GET /api/incidents/{id}/comments`) ni tabla de comentarios | Tab **Comentarios** de §8.2, `addComment` de §4, `CommentComposer` de §3, y "comentario obligatorio al rechazar/cerrar" de §8.2 | ¿Se crea el recurso en el backend (entidad + migración + controller) o se elimina del alcance? |
 | **B4** | **No existe `POST /api/incidents/{id}/assign`.** La asignación real es a **institución** (vía `PATCH /triage`), y la asignación a **técnico** solo ocurre creando una **orden de trabajo** (`POST /api/work-orders {incidenciaId, usuarioAsignadoId, descripcionTrabajo}`), que además fuerza la incidencia a `Asignada` | `AssignTechnicianSheet` (§3, §8.2) y `IncidentsRepository.assign` (§4) | ¿Se acepta implementar "Asignar" como creación de orden de trabajo (endpoint real, semántica del dominio), o se exige un `/assign` nuevo? |
 | **B5** | **El API no pagina.** `GET /api/incidents` devuelve un **array plano** completo, sin `page`/`pageSize`/`total`. Tampoco soporta `q` (texto), `from`/`to` (fechas), `assignedTo`, ni multi-valor de estado | **Scroll infinito y `Page<T>` (§4, §6, §8.1, iteración 5) no implementables server-side.** Búsqueda y rango de fechas tendrían que resolverse en cliente sobre todo el conjunto | ¿Paginación y búsqueda **en cliente** (simple, no escala), o se añaden `page`/`pageSize`/`q`/`from`/`to` al backend? |
 | **B6** | **`PATCH /api/incidents/{id}/status` no acepta comentario.** Body = `{estado}` únicamente | El comentario obligatorio al rechazar/cerrar (§8.2) **no se persiste en ningún lado** | ¿Se amplía `UpdateStatusRequest` con `comentario` (y dónde se guarda: `UserActivity.Description`, comentarios de B3, o nueva columna)? ¿O se quita el requisito? |
 | **B7** | **No hay endpoint para listar usuarios/técnicos.** Solo la vista MVC `UserManagementController.Index` (cookies + rol `Administrador`). No hay `GET /api/users?role=Tecnico` | El **buscador de técnicos** de `AssignTechnicianSheet` (§8.2) no tiene fuente de datos | ¿Se crea `GET /api/users?role=` en el backend, o se elimina la asignación desde el móvil? |
 | **B8** | **El gate de §11 ya arranca en rojo.** `flutter test` falla en `test/widget_test.dart` (plantilla del contador de Flutter, referencia `MyApp`, clase inexistente — la app es `UrbanSyncApp`). También es el único `error` del `flutter analyze` baseline | §0.3 prohíbe avanzar con tests fallando ⇒ **ninguna iteración podría cerrarse.** Arreglarlo toca un archivo fuera del módulo (§0.2) | ¿Autorizas borrar/corregir `test/widget_test.dart` (1 línea, cambio trivial fuera del módulo, se anotaría en §12)? Es la vía más limpia para desbloquear el gate |
-| **B9** | **Conflicto de alcance entre documentos.** La spec del loop (§1) dice *"Qué NO se construye: backend (ya existe)"* y §0.1 prohíbe inventar endpoints; el `CLAUDE.md` del repo (Flujo §5) dice *"Crear los endpoints faltantes en el API respetando su arquitectura"* | Determina si B1, B3, B4, B5, B6 y B7 se resuelven tocando el backend o se recortan del alcance | **Decisión raíz: ¿el módulo es solo Flutter, o incluye ampliar el API?** Todo lo demás depende de esto |
+| **B9** | ~~Conflicto de alcance~~ → **RESUELTO por instrucción del humano**: no se toca el backend, se consumen los endpoints tal cual | B3, B4, B6, B7 quedan **fuera de alcance** (no hay endpoint y no se crea): sin comentarios, sin `/assign`, sin comentario en cambio de estado, sin buscador de técnicos | — (asignación de técnico solo sería posible si se apunta al backend actual vía `POST /api/work-orders`) |
+| **B10** | **¿A qué backend apunta la app?** Son dos APIs **incompatibles y complementarias**: · **actual** `backend/UrbanSync.Web` `:8080` → incidents + **evidences + catálogos + work-orders + reports**, **sin auditoría** · **nuevo** `src/backend/UrbanSync.Api` `:5119` (upstream) → incidents + **auditoría + roles + usuarios**, **sin evidences/catálogos/work-orders/reports** | **Apuntar al nuevo API habilita Auditoría pero rompe Reportar Incidencia (`/api/incident-types`, `/api/jurisdictions`), Evidencias, Triage y Dashboard** — viola §0.2. Además los **roles cambian** (`Supervisor`/`Tecnico` ya no existen ⇒ `AppUser.roleGroup` manda a todos a `citizen`) y `usuarioId` pasa de GUID a `int` | **Decisión raíz nueva.** Tres caminos: **(a)** apuntar al API nuevo y aceptar que se rompen 4 pantallas; **(b)** mantener `:8080` y que el módulo de auditoría hable con `:5119` en paralelo (dos `baseUrl`, dos tokens — los JWT no son intercambiables); **(c)** integrar el upstream (`git merge rrivas/main --allow-unrelated-histories`, reestructuración mayor con `mobile/` + `src/mobile/` duplicados). **¿Cuál?** |
 
 ---
 
