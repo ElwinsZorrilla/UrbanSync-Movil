@@ -7,18 +7,15 @@ import 'package:urbansync/features/incidents/domain/catalog.dart';
 import 'package:urbansync/features/incidents/presentation/report_incident_page.dart';
 
 class _FakeIncidentsRepository extends IncidentsRepository {
-  _FakeIncidentsRepository({this.types, this.typesError}) : super(Dio());
+  _FakeIncidentsRepository({this.types}) : super(Dio());
 
   final List<IncidentType>? types;
-  final Object? typesError;
 
   int typesCalls = 0;
 
   @override
   Future<List<IncidentType>> incidentTypes() async {
     typesCalls++;
-
-    if (typesError != null) throw typesError!;
 
     return types ??
         const [
