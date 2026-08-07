@@ -243,10 +243,17 @@ class _ReportIncidentPageState extends ConsumerState<ReportIncidentPage> {
               const SizedBox(height: 16),
               typesAsync.when(
                 loading: () => const LinearProgressIndicator(),
-                error: (_, __) => const Text(
-                  'No se pudieron cargar los tipos de incidencia.',
+                error: (error, _) => _typesUnavailable(
+                  error is ApiException
+                      ? error.message
+                      : 'No se pudieron cargar los tipos de incidencia.',
                 ),
-                data: (types) => _typeDropdown(types),
+                data: (types) => types.isEmpty
+                    ? _typesUnavailable(
+                        'No hay tipos de incidencia configurados. '
+                        'Contacta al administrador.',
+                      )
+                    : _typeDropdown(types),
               ),
               const SizedBox(height: 16),
               _priorityDropdown(),
@@ -352,6 +359,46 @@ class _ReportIncidentPageState extends ConsumerState<ReportIncidentPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _typesUnavailable(String message) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Tipo de incidencia',
+          style: Theme.of(context).textTheme.labelLarge,
+        ),
+        const SizedBox(height: 6),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppColors.destructive.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: AppColors.destructive.withValues(alpha: 0.35),
+            ),
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.error_outline,
+                size: 18,
+                color: AppColors.destructive,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(message, style: const TextStyle(fontSize: 13)),
+              ),
+              TextButton(
+                onPressed: () => ref.invalidate(incidentTypesProvider),
+                child: const Text('Reintentar'),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 

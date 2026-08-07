@@ -4,11 +4,11 @@ import '../data/incidents_repository.dart';
 import '../domain/catalog.dart';
 import '../domain/incident.dart';
 
-final incidentTypesProvider = FutureProvider<List<IncidentType>>(
+final incidentTypesProvider = FutureProvider.autoDispose<List<IncidentType>>(
   (ref) => ref.read(incidentsRepositoryProvider).incidentTypes(),
 );
 
-final jurisdictionsProvider = FutureProvider<List<Jurisdiction>>(
+final jurisdictionsProvider = FutureProvider.autoDispose<List<Jurisdiction>>(
   (ref) => ref.read(incidentsRepositoryProvider).jurisdictions(),
 );
 

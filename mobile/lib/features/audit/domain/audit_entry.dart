@@ -118,11 +118,13 @@ class AuditEntry {
 
   bool get esDeIncidencia => entidad == entidadIncidencias && entidadId != null;
 
+  /// `usuarioId` llega como entero en unas implementaciones del API y como
+  /// GUID en otras, así que se normaliza a texto.
   factory AuditEntry.fromJson(Map<String, dynamic> json) => AuditEntry(
-    id: json['id'] as int,
+    id: (json['id'] as num).toInt(),
     accion: json['accion'] as String? ?? '',
     fechaHora: DateTime.parse(json['fechaHora'] as String),
-    usuarioId: json['usuarioId'] as String?,
+    usuarioId: json['usuarioId']?.toString(),
     nombreUsuario: json['nombreUsuario'] as String?,
     entidad: json['entidad'] as String?,
     entidadId: (json['entidadId'] as num?)?.toInt(),
